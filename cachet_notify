@@ -1,16 +1,18 @@
-#!/usr/bin/php5
+#!/usr/bin/php
 <?php
-
 if ($argc != 6) {
 	echo 'Usage: ' . basename(__FILE__) . ' cachet_component service_name service_state service_state_type service_output' . "\n";
 	exit(1);
 }
 
-$cachet_url = 'http://xxxx/api/v1/';
-$api_key = 'xxxx';
+$cachetapi_url = 'https://xxxxx/api/v1/';
+$cachetapi_key = 'XXX';
+$debug=1;
 
-$incident_prefix = '[Nagios]';
-$cachet_notify_subscribers = true; // Enable subscribers notifcation for incidents creation and updates
+$incident_prefix = '[Icinga2]';
+
+// Enable subscribers notifcation for incidents creation and updates
+$cachet_notify_subscribers = true;
 
 $cachet_component = $argv[1];
 $service_name = $argv[2];
@@ -25,10 +27,10 @@ define('CATCHET_STATUS_FIXED', 4);
 
 
 function cachet_query($api_part, $action = 'GET', $data = null) {
-	global $api_key, $cachet_url;
+	global $cachetapi_key, $cachetapi_url;
 
 	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $cachet_url . $api_part); 
+	curl_setopt($ch, CURLOPT_URL, $cachetapi_url . $api_part);
 	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
@@ -43,7 +45,7 @@ function cachet_query($api_part, $action = 'GET', $data = null) {
 	}
 
 	$ch_headers = array(
-		'X-Cachet-Token: ' . $api_key
+		'X-Cachet-Token: ' . $cachetapi_key
 	);
 	curl_setopt($ch, CURLOPT_HTTPHEADER, $ch_headers);
 
@@ -51,21 +53,29 @@ function cachet_query($api_part, $action = 'GET', $data = null) {
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); // Return body
 	$http_body = curl_exec($ch);
 	$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-	curl_close($ch); 
+	curl_close($ch);
 
 	return array('code' => $http_code, 'body' => json_decode($http_body));
 }
 
 /* Find Cachet component ID */
 $result = cachet_query('components');
+if ($debug) {
+	echo "Query Result:\n";
+	var_dump($result);
+	echo "============\n";
+}
 if ($result['code'] != 200) {
-	echo 'Can\'t query components' . "\n";
+	echo 'Can\'t query components' . " => {$result['code']} \n";
 	exit(1);
 }
 $cachet_component_id = false;
 foreach ($result['body']->data as $component) {
 	if ($cachet_component == $component->name) { // We nailed it
-		$cachet_component_id = $component->id;
+	        if($debug){
+                echo "Component: " ."$component->id \n";
+                }
+	        $cachet_component_id = $component->id;
 		break; // Yes, bad.
 	}
 }
@@ -98,7 +108,7 @@ if ($service_status != 'OK' && $service_status_type == 'SOFT') { // Hope it will
 	);
 	$result = cachet_query('incidents', 'POST', $query);
 	if ($result['code'] != 200) {
-		echo 'Can\'t create incident' . "\n";
+		echo 'Can\'t create incident' . " => {$result['code']}\n";
 		exit(1);
 	}
 } elseif ($service_status == 'OK' && $service_status_type == 'SOFT') { // Recovery underway
@@ -106,7 +116,7 @@ if ($service_status != 'OK' && $service_status_type == 'SOFT') { // Hope it will
 	/* Get the incident ID */
 	$results = cachet_query('incidents');
 	if ($result['code'] != 200) {
-		echo 'Can\'t get incidents' . "\n";
+		echo 'Can\'t get incidents' . " => {$result['code']}\n";
 		exit(1);
 	}
 	$cachet_incident_id = false;
@@ -131,7 +141,7 @@ if ($service_status != 'OK' && $service_status_type == 'SOFT') { // Hope it will
 	);
 	$result = cachet_query('incidents/' . $cachet_incident_id, 'PUT', $query);
 	if ($result['code'] != 200) {
-		echo 'Can\'t update incident' . "\n";
+		echo 'Can\'t update incident' . " => {$result['code']}\n";
 		exit(1);
 	}
 } elseif ($service_status == 'OK' && $service_status_type == 'HARD') { // Recovery completed
@@ -139,7 +149,7 @@ if ($service_status != 'OK' && $service_status_type == 'SOFT') { // Hope it will
 	/* Get the incident ID */
 	$results = cachet_query('incidents');
 	if ($result['code'] != 200) {
-		echo 'Can\'t get incidents' . "\n";
+		echo 'Can\'t get incidents' . " => {$result['code']}\n";
 		exit(1);
 	}
 	$cachet_incident_id = false;
@@ -164,7 +174,7 @@ if ($service_status != 'OK' && $service_status_type == 'SOFT') { // Hope it will
 	);
 	$result = cachet_query('incidents/' . $cachet_incident_id, 'PUT', $query);
 	if ($result['code'] != 200) {
-		echo 'Can\'t update incident' . "\n";
+		echo 'Can\'t update incident' . " => {$result['code']}\n";
 		exit(1);
 	}
 } else {
